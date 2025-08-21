@@ -1,0 +1,50 @@
+name: Scrape IPO GMP (every 10 min)
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gmp-scrape
+  cancel-in-progress: true
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Google Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper (writes data/gmp.json)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: python scraper.py
+
+      - name: Commit & push if gmp.json changed
+        run: |
+          if ! git diff --quiet -- data/gmp.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/gmp.json
+            git commit -m "Auto-update GMP JSON ($(date -u +'%Y-%m-%d %H:%M:%S') UTC)"
+            git push
+          else
+            echo "No changes in data/gmp.json"
+          fi
